@@ -7,8 +7,8 @@
 //
 // In PRODUCTION (Vercel / static build):
 //   - VITE_API_BASE_URL must be set to the deployed backend URL
-//     e.g. https://paypilot-ai-backend.onrender.com
-//   - All fetch calls become 'https://paypilot-ai-backend.onrender.com/api/health'
+//     e.g. https://paypilot-ai-rmwu.onrender.com
+//   - All fetch calls become 'https://paypilot-ai-rmwu.onrender.com/api/health'
 //   - No proxy is involved; the browser calls the backend directly via CORS
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -22,7 +22,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
  * @example
  *   apiUrl('/api/health')
  *   // dev:  '/api/health'
- *   // prod: 'https://paypilot-ai-backend.onrender.com/api/health'
+ *   // prod: 'https://paypilot-ai-rmwu.onrender.com/api/health'
  */
 export function apiUrl(path) {
   return `${API_BASE_URL}${path}`;
