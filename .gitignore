@@ -1,0 +1,23 @@
+# Node & Dependencies
+node_modules/
+**/node_modules/
+
+# Environment files & Secrets
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# Build outputs
+dist/
+dist-ssr/
+**/dist/
+**/dist-ssr/
+
+# Logs & OS cache
+*.log
+**/*.log
+.DS_Store
+Thumbs.db
