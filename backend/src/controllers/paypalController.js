@@ -75,12 +75,28 @@ export async function createInvoice(req, res, next) {
 
     const created = await createPayPalInvoice(invoiceData);
 
+    // Build user-facing message with conversion details if applicable
+    const convInfo = created._conversionInfo;
+    let message = 'Invoice created successfully in PayPal Sandbox (Status: DRAFT).';
+    if (convInfo && convInfo.conversionApplied) {
+      message = `Invoice created in PayPal Sandbox (Status: DRAFT). Amount converted from ${convInfo.originalCurrency} ${convInfo.originalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} to USD ${convInfo.paypalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} at rate ${convInfo.conversionRate}.`;
+    }
+
     return res.status(201).json({
       success: true,
-      message: 'Invoice created successfully in PayPal Sandbox (Status: DRAFT).',
+      message,
       data: created
     });
   } catch (err) {
+    // Surface conversion rate errors as 400 with clear instructions
+    if (err.code === 'CONVERSION_RATE_MISSING') {
+      return res.status(400).json({
+        success: false,
+        code: 'CONVERSION_RATE_MISSING',
+        error: err.message,
+        instructions: 'Set the INR_TO_USD_RATE environment variable on Render (e.g. 0.012 for 1 INR ≈ $0.012 USD).'
+      });
+    }
     next(err);
   }
 }

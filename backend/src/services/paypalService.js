@@ -9,6 +9,17 @@ import axios from 'axios';
 
 const DEFAULT_SANDBOX_BASE = 'https://api-m.sandbox.paypal.com';
 
+/**
+ * Currencies natively supported by PayPal Sandbox Invoicing API.
+ * If the invoice currency is not in this list AND we are in sandbox mode,
+ * amounts are converted to USD using the configured INR_TO_USD_RATE.
+ */
+const PAYPAL_SANDBOX_SUPPORTED_CURRENCIES = new Set([
+  'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'HKD', 'SGD',
+  'SEK', 'DKK', 'NOK', 'PLN', 'BRL', 'MXN', 'NZD', 'CZK', 'HUF',
+  'ILS', 'PHP', 'THB', 'TWD', 'RUB'
+]);
+
 // In-memory cache for OAuth2 access token
 let cachedToken = null;
 let tokenExpiryTime = 0;
@@ -27,6 +38,53 @@ export function isPayPalConfigured() {
  */
 export function getPayPalBaseUrl() {
   return process.env.PAYPAL_API_BASE || DEFAULT_SANDBOX_BASE;
+}
+
+/**
+ * Reads and validates the INR_TO_USD_RATE environment variable.
+ * @returns {{ rate: number } | { error: string }}
+ */
+export function getConversionRate() {
+  const raw = process.env.INR_TO_USD_RATE;
+  if (!raw || !raw.trim()) {
+    return { error: 'INR_TO_USD_RATE environment variable is not configured. Cannot convert INR to USD for PayPal Sandbox.' };
+  }
+
+  const rate = parseFloat(raw.trim());
+  if (isNaN(rate) || rate <= 0) {
+    return { error: `INR_TO_USD_RATE value "${raw.trim()}" is not a valid positive number.` };
+  }
+
+  return { rate };
+}
+
+/**
+ * Converts an amount from the original currency to USD for PayPal Sandbox.
+ * Rounds to 2 decimal places using banker's rounding.
+ *
+ * @param {number} amount - Original amount
+ * @param {string} currency - Original 3-letter currency code
+ * @param {number} rate - Conversion rate (e.g. 0.012 means 1 INR = 0.012 USD)
+ * @returns {{ convertedAmount: number, paypalCurrency: string, conversionApplied: boolean }}
+ */
+export function convertForPayPal(amount, currency, rate) {
+  const upperCurrency = (currency || 'USD').toUpperCase();
+
+  if (PAYPAL_SANDBOX_SUPPORTED_CURRENCIES.has(upperCurrency)) {
+    return {
+      convertedAmount: parseFloat(parseFloat(amount).toFixed(2)),
+      paypalCurrency: upperCurrency,
+      conversionApplied: false
+    };
+  }
+
+  // Currency is unsupported by PayPal Sandbox — convert to USD
+  const converted = parseFloat(amount) * rate;
+  return {
+    convertedAmount: parseFloat(converted.toFixed(2)),
+    paypalCurrency: 'USD',
+    conversionApplied: true
+  };
 }
 
 /**
@@ -88,28 +146,69 @@ export async function getPayPalAccessToken() {
 }
 
 /**
- * Converts PayPilot internal invoice model to PayPal Invoicing API v2 payload
+ * Converts PayPilot internal invoice model to PayPal Invoicing API v2 payload.
+ *
+ * If the invoice currency is not supported by PayPal Sandbox (e.g. INR),
+ * all amounts are converted to USD using the configured INR_TO_USD_RATE.
+ * The original invoice data is never mutated.
+ *
+ * @param {Object} invoice - Internal PayPilot invoice object
+ * @param {Object} [options] - Options
+ * @param {number} [options.conversionRate] - Conversion rate to use (for testing)
+ * @returns {{ payload: Object, conversionInfo: Object }}
  */
-export function formatPayPalInvoicePayload(invoice) {
+export function formatPayPalInvoicePayload(invoice, options = {}) {
   // Split customer name into given name and surname
   const nameParts = (invoice.customerName || 'Valued Customer').trim().split(/\s+/);
   const givenName = nameParts[0] || 'Valued';
   const surname = nameParts.slice(1).join(' ') || 'Customer';
 
-  const currencyCode = (invoice.currency || 'USD').toUpperCase();
+  const originalCurrency = (invoice.currency || 'USD').toUpperCase();
   const todayStr = invoice.issueDate || new Date().toISOString().split('T')[0];
+
+  // Determine if currency conversion is needed
+  const needsConversion = !PAYPAL_SANDBOX_SUPPORTED_CURRENCIES.has(originalCurrency);
+  let conversionRate = null;
+  let paypalCurrency = originalCurrency;
+
+  if (needsConversion) {
+    if (options.conversionRate != null) {
+      conversionRate = options.conversionRate;
+    } else {
+      const rateResult = getConversionRate();
+      if (rateResult.error) {
+        const error = new Error(rateResult.error);
+        error.code = 'CONVERSION_RATE_MISSING';
+        error.status = 400;
+        throw error;
+      }
+      conversionRate = rateResult.rate;
+    }
+    paypalCurrency = 'USD';
+  }
+
+  /**
+   * Helper: convert an amount if needed, returning the 2-decimal string
+   */
+  function toPayPalAmount(amount) {
+    const num = parseFloat(amount) || 0;
+    if (needsConversion) {
+      return parseFloat((num * conversionRate).toFixed(2));
+    }
+    return parseFloat(num.toFixed(2));
+  }
 
   // Map line items or fallback to single item
   const items = (invoice.items && invoice.items.length > 0)
     ? invoice.items.map((it) => {
-        const unitVal = (parseFloat(it.unitPrice) || 0).toFixed(2);
+        const convertedUnit = toPayPalAmount(it.unitPrice);
         return {
           name: (it.name || invoice.serviceDescription || 'Service').slice(0, 300),
           description: (it.description || invoice.serviceDescription || '').slice(0, 1000),
           quantity: String(it.quantity || 1),
           unit_amount: {
-            currency_code: currencyCode,
-            value: unitVal
+            currency_code: paypalCurrency,
+            value: convertedUnit.toFixed(2)
           },
           unit_of_measure: 'QUANTITY'
         };
@@ -120,8 +219,8 @@ export function formatPayPalInvoicePayload(invoice) {
           description: (invoice.serviceDescription || '').slice(0, 1000),
           quantity: '1',
           unit_amount: {
-            currency_code: currencyCode,
-            value: (parseFloat(invoice.amount) || 0).toFixed(2)
+            currency_code: paypalCurrency,
+            value: toPayPalAmount(invoice.amount).toFixed(2)
           },
           unit_of_measure: 'QUANTITY'
         }
@@ -131,8 +230,10 @@ export function formatPayPalInvoicePayload(invoice) {
     detail: {
       invoice_number: invoice.invoiceNumber,
       invoice_date: todayStr,
-      currency_code: currencyCode,
-      note: 'Thank you for your business. Generated via PayPilot AI.',
+      currency_code: paypalCurrency,
+      note: needsConversion
+        ? `Thank you for your business. Generated via PayPilot AI. Original amount: ${originalCurrency} ${parseFloat(invoice.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} (converted to USD at rate ${conversionRate}).`
+        : 'Thank you for your business. Generated via PayPilot AI.',
       term: 'No refund after 30 days.'
     },
     invoicer: {
@@ -170,13 +271,25 @@ export function formatPayPalInvoicePayload(invoice) {
     };
   }
 
-  return payload;
+  // Build conversion info metadata (never mutates original invoice)
+  const conversionInfo = {
+    originalCurrency,
+    originalAmount: parseFloat(invoice.amount) || 0,
+    paypalCurrency,
+    paypalAmount: needsConversion
+      ? toPayPalAmount(invoice.amount)
+      : parseFloat(parseFloat(invoice.amount).toFixed(2)),
+    conversionApplied: needsConversion,
+    conversionRate: needsConversion ? conversionRate : null
+  };
+
+  return { payload, conversionInfo };
 }
 
 /**
  * Creates a new invoice in PayPal Sandbox (Status: DRAFT)
  * @param {Object} invoice - Internal PayPilot invoice object
- * @returns {Promise<Object>} Created PayPal invoice response
+ * @returns {Promise<Object>} Created PayPal invoice response with conversion info
  */
 export async function createPayPalInvoice(invoice) {
   if (!invoice.customerEmail) {
@@ -188,7 +301,7 @@ export async function createPayPalInvoice(invoice) {
 
   const token = await getPayPalAccessToken();
   const baseUrl = getPayPalBaseUrl();
-  const payload = formatPayPalInvoicePayload(invoice);
+  const { payload, conversionInfo } = formatPayPalInvoicePayload(invoice);
 
   try {
     const response = await axios({
@@ -202,7 +315,10 @@ export async function createPayPalInvoice(invoice) {
       data: payload
     });
 
-    return response.data;
+    return {
+      ...response.data,
+      _conversionInfo: conversionInfo
+    };
   } catch (err) {
     console.error('PayPal Create Invoice Error:', err.response?.data || err.message);
     const error = new Error(

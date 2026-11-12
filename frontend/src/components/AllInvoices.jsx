@@ -82,6 +82,12 @@ export default function AllInvoices({ onNavigate }) {
             message: 'PayPal Sandbox Credentials Required',
             instructions: 'Please configure PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET in backend/.env to sync with PayPal.'
           });
+        } else if (data.code === 'CONVERSION_RATE_MISSING') {
+          setActionNotice({
+            type: 'config',
+            message: 'Currency Conversion Rate Required',
+            instructions: data.instructions || 'Please set INR_TO_USD_RATE in the backend environment (e.g. 0.012).'
+          });
         } else {
           setActionNotice({
             type: 'error',
@@ -92,19 +98,27 @@ export default function AllInvoices({ onNavigate }) {
       }
 
       const paypalId = data.data?.id || `INV2-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+      const convInfo = data.data?._conversionInfo;
       const updatedInv = {
         ...inv,
         paypalInvoiceId: paypalId,
         paypalStatus: 'DRAFT',
         status: 'PAYPAL_DRAFT',
         paypalHref: data.data?.href,
-        lastUpdatedTime: new Date().toISOString()
+        lastUpdatedTime: new Date().toISOString(),
+        ...(convInfo ? { paypalConversionInfo: convInfo } : {})
       };
 
       updateStoredInvoice(updatedInv);
+
+      // Build success message with conversion details when applicable
+      let successMsg = `Invoice ${inv.invoiceNumber} synced to PayPal Sandbox as DRAFT (${paypalId})!`;
+      if (convInfo && convInfo.conversionApplied) {
+        successMsg = `Invoice ${inv.invoiceNumber} synced to PayPal Sandbox as DRAFT (${paypalId}). Amount converted: ${convInfo.originalCurrency} ${Number(convInfo.originalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })} → USD ${Number(convInfo.paypalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })} (rate: ${convInfo.conversionRate}).`;
+      }
       setActionNotice({
         type: 'success',
-        message: `Invoice ${inv.invoiceNumber} synced to PayPal Sandbox as DRAFT (${paypalId})!`
+        message: successMsg
       });
     } catch (err) {
       console.error('PayPal push error:', err);
