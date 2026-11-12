@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateWithRetry, stripCodeFences } from '../utils/geminiRetry.js';
 
 /**
  * AI Payment Assistant Service
@@ -179,15 +179,6 @@ export async function generateAiReminder(invoice, tone = 'professional') {
     throw error;
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-3.8-flash',
-    generationConfig: {
-      temperature: 0.2,
-      responseMimeType: 'application/json'
-    }
-  });
-
   const prompt = `
 You are the AI Payment Follow-up Assistant for PayPilot AI.
 Generate a tailored email payment reminder for the following invoice:
@@ -221,17 +212,16 @@ STRICT INSTRUCTIONS:
 `;
 
   try {
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    const { text, modelUsed } = await generateWithRetry({
+      apiKey,
+      generationConfig: {
+        temperature: 0.2,
+        responseMimeType: 'application/json'
+      },
+      prompt
+    });
 
-    let cleanJson = text.trim();
-    if (cleanJson.startsWith('```json')) {
-      cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (cleanJson.startsWith('```')) {
-      cleanJson = cleanJson.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
-
+    const cleanJson = stripCodeFences(text);
     const parsed = JSON.parse(cleanJson);
     return {
       subject: parsed.subject,
@@ -239,7 +229,8 @@ STRICT INSTRUCTIONS:
       tone: eligibility.normalizedTone,
       urgencyLevel: urgencyInfo.urgencyLevel,
       daysDiff: urgencyInfo.daysDiff,
-      suggestedFollowUpDate: urgencyInfo.suggestedFollowUpDate
+      suggestedFollowUpDate: urgencyInfo.suggestedFollowUpDate,
+      _modelUsed: modelUsed
     };
   } catch (err) {
     console.error('Gemini Reminder Generation Error:', err);

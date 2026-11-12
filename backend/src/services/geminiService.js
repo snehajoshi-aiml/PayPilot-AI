@@ -1,7 +1,10 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateWithRetry, stripCodeFences } from '../utils/geminiRetry.js';
 
 /**
- * Extracts structured invoice information from natural language using Google Gemini
+ * Extracts structured invoice information from natural language using Google Gemini.
+ * Uses exponential backoff retries for transient 503/429 errors, with automatic
+ * fallback to a stable secondary model if the primary model is unavailable.
+ *
  * @param {string} userPrompt - Natural language prompt from the user
  * @returns {Promise<Object>} Extracted raw data from Gemini
  */
@@ -14,15 +17,6 @@ export async function extractInvoiceFromPrompt(userPrompt) {
     error.status = 503;
     throw error;
   }
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-3.8-flash',
-    generationConfig: {
-      temperature: 0.1,
-      responseMimeType: 'application/json'
-    }
-  });
 
   const todayStr = new Date().toISOString().split('T')[0];
   const currentYear = new Date().getFullYear();
@@ -64,23 +58,25 @@ JSON SCHEMA TO RETURN:
   const fullPrompt = `${systemInstructions}\n\nUSER INVOICE REQUEST:\n"${userPrompt}"`;
 
   try {
-    const result = await model.generateContent(fullPrompt);
-    const response = await result.response;
-    const text = response.text();
+    const { text, modelUsed } = await generateWithRetry({
+      apiKey,
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: 'application/json'
+      },
+      prompt: fullPrompt
+    });
 
     if (!text) {
       throw new Error('Received empty response from Gemini API.');
     }
 
-    // Strip markdown code fences if Gemini wraps JSON in ```json ... ```
-    let cleanJson = text.trim();
-    if (cleanJson.startsWith('```json')) {
-      cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (cleanJson.startsWith('```')) {
-      cleanJson = cleanJson.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
-
+    const cleanJson = stripCodeFences(text);
     const parsed = JSON.parse(cleanJson);
+
+    // Attach which model actually served the response
+    parsed._modelUsed = modelUsed;
+
     return parsed;
   } catch (err) {
     console.error('Gemini API extraction error:', err);
