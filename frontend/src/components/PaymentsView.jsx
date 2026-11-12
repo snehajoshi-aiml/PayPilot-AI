@@ -21,6 +21,7 @@ import {
   X,
   Lock
 } from 'lucide-react';
+import { apiUrl } from '../config/api';
 
 export default function PaymentsView({ onNavigate }) {
   const [paypalStatus, setPaypalStatus] = useState(null);
@@ -52,7 +53,7 @@ export default function PaymentsView({ onNavigate }) {
   const checkGatewayStatus = async () => {
     setLoadingStatus(true);
     try {
-      const res = await fetch('/api/paypal/status');
+      const res = await fetch(apiUrl('/api/paypal/status'));
       const data = await res.json();
       setPaypalStatus(data);
     } catch (err) {
@@ -110,7 +111,7 @@ export default function PaymentsView({ onNavigate }) {
     setNotification(null);
 
     try {
-      const res = await fetch(`/api/paypal/invoices/${encodeURIComponent(inv.paypalInvoiceId)}/tracking`);
+      const res = await fetch(apiUrl(`/api/paypal/invoices/${encodeURIComponent(inv.paypalInvoiceId)}/tracking`));
       const result = await res.json();
 
       if (!res.ok) {
@@ -168,7 +169,7 @@ export default function PaymentsView({ onNavigate }) {
 
     try {
       const invoiceIds = syncedInvoices.map((i) => i.paypalInvoiceId).filter(Boolean);
-      const res = await fetch('/api/paypal/invoices/batch-status', {
+      const res = await fetch(apiUrl('/api/paypal/invoices/batch-status'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ invoiceIds })

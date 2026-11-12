@@ -24,6 +24,7 @@ import AiInvoiceGenerator from './components/AiInvoiceGenerator';
 import AllInvoices from './components/AllInvoices';
 import PaymentsView from './components/PaymentsView';
 import AiPaymentAssistant from './components/AiPaymentAssistant';
+import { apiUrl } from './config/api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -53,7 +54,7 @@ export default function App() {
   const checkBackendHealth = async () => {
     setLoadingHealth(true);
     try {
-      const res = await fetch('/api/health');
+      const res = await fetch(apiUrl('/api/health'));
       if (res.ok) {
         const data = await res.json();
         setBackendHealth(data);
@@ -194,7 +195,7 @@ export default function App() {
                 {loadingHealth
                   ? 'Checking...'
                   : backendHealth?.status === 'ok'
-                  ? 'Connected (Port 5000)'
+                  ? 'Connected'
                   : 'Disconnected'}
               </span>
               <button

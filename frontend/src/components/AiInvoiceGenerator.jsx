@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   Info
 } from 'lucide-react';
+import { apiUrl } from '../config/api';
 
 const SAMPLE_PROMPTS = [
   {
@@ -72,7 +73,7 @@ export default function AiInvoiceGenerator({ onInvoiceCreated, onNavigate }) {
     setSuccessToast(null);
 
     try {
-      const response = await fetch('/api/ai/parse-invoice', {
+      const response = await fetch(apiUrl('/api/ai/parse-invoice'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

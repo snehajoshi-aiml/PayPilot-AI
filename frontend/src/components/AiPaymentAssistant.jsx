@@ -19,6 +19,7 @@ import {
   HelpCircle,
   ArrowRight
 } from 'lucide-react';
+import { apiUrl } from '../config/api';
 
 const TONE_OPTIONS = [
   {
@@ -110,7 +111,7 @@ export default function AiPaymentAssistant({ onNavigate }) {
     setDeliveryResult(null);
 
     try {
-      const res = await fetch('/api/ai/generate-reminder', {
+      const res = await fetch(apiUrl('/api/ai/generate-reminder'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -158,7 +159,7 @@ export default function AiPaymentAssistant({ onNavigate }) {
     setIsSending(true);
 
     try {
-      const res = await fetch('/api/ai/send-reminder', {
+      const res = await fetch(apiUrl('/api/ai/send-reminder'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

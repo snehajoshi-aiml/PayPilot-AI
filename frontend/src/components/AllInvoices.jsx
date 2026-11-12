@@ -20,6 +20,7 @@ import {
   Sparkles,
   CreditCard
 } from 'lucide-react';
+import { apiUrl } from '../config/api';
 
 export default function AllInvoices({ onNavigate }) {
   const [invoices, setInvoices] = useState([]);
@@ -67,7 +68,7 @@ export default function AllInvoices({ onNavigate }) {
     setActionNotice(null);
 
     try {
-      const res = await fetch('/api/paypal/invoices', {
+      const res = await fetch(apiUrl('/api/paypal/invoices'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(inv)
@@ -135,7 +136,7 @@ export default function AllInvoices({ onNavigate }) {
     try {
       let paypalId = inv.paypalInvoiceId;
       if (!paypalId) {
-        const createRes = await fetch('/api/paypal/invoices', {
+        const createRes = await fetch(apiUrl('/api/paypal/invoices'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(inv)
@@ -159,7 +160,7 @@ export default function AllInvoices({ onNavigate }) {
         paypalId = createData.data?.id;
       }
 
-      const sendRes = await fetch(`/api/paypal/invoices/${encodeURIComponent(paypalId)}/send`, {
+      const sendRes = await fetch(apiUrl(`/api/paypal/invoices/${encodeURIComponent(paypalId)}/send`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -209,7 +210,7 @@ export default function AllInvoices({ onNavigate }) {
     setActionNotice(null);
 
     try {
-      const res = await fetch(`/api/paypal/invoices/${encodeURIComponent(inv.paypalInvoiceId)}/tracking`);
+      const res = await fetch(apiUrl(`/api/paypal/invoices/${encodeURIComponent(inv.paypalInvoiceId)}/tracking`));
       const result = await res.json();
 
       if (!res.ok) {
