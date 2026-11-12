@@ -247,7 +247,7 @@ export default function AiInvoiceGenerator({ onInvoiceCreated, onNavigate }) {
             <Sparkles className="h-4 w-4" />
           </span>
           <span className="text-xs font-bold uppercase tracking-wider text-brand-600">
-            Powered by Google Gemini 1.5
+            Powered by Google Gemini 3.8
           </span>
         </div>
         <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">

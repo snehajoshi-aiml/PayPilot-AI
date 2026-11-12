@@ -101,7 +101,7 @@ PayPilot AI solves these challenges through a unified, secure, AI-powered fintec
                         ▼                        ▼
       ┌───────────────────────────┐    ┌──────────────────────────────────┐
       │     Google Gemini API     │    │   PayPal REST API Sandbox        │
-      │   (gemini-1.5-flash)      │    │  (api-m.sandbox.paypal.com)      │
+      │   (gemini-3.8-flash)      │    │  (api-m.sandbox.paypal.com)      │
       └───────────────────────────┘    └──────────────────────────────────┘
 ```
 
